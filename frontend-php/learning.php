@@ -1,89 +1,165 @@
-<?php include 'includes/header.php'; ?>
+<?php 
+require_once 'includes/auth.php';
+require_once 'includes/db.php';
+require_once 'includes/roadmap_helper.php';
+
+requireAuth();
+$user = getCurrentUser();
+
+// Input parameters
+$unitId = (int)($_GET['unit_id'] ?? 0);
+$weekNum = (int)($_GET['week'] ?? 0);
+$videoId = (int)($_GET['video'] ?? 0);
+
+// Basic validation
+if (!$unitId) {
+    header('Location: dashboard.php');
+    exit;
+}
+
+// Fetch Unit details
+$unit = getUnit($unitId, $user['id']);
+if (!$unit) {
+    header('Location: dashboard.php?error=UnitNotFound');
+    exit;
+}
+
+// Fetch Roadmap for this unit to find the specific week
+$roadmapAll = getUnitRoadmap($unitId);
+$activeWeek = null;
+
+// Determine active week (default to current week or first week)
+if ($weekNum > 0) {
+    foreach ($roadmapAll as $week) {
+        if ($week['week_number'] == $weekNum) {
+            $activeWeek = $week;
+            break;
+        }
+    }
+} else {
+    // If no week specified, find the 'current' status week, or default to week 1
+    foreach ($roadmapAll as $week) {
+        if ($week['status'] === 'current') {
+            $activeWeek = $week;
+            break;
+        }
+    }
+    if (!$activeWeek && !empty($roadmapAll)) {
+        $activeWeek = $roadmapAll[0];
+    }
+}
+
+if (!$activeWeek) {
+    // No roadmap generated yet
+    header('Location: roadmap.php?unit_id=' . $unitId);
+    exit;
+}
+
+// Fetch Videos for the active week
+$videos = getWeekVideos($activeWeek['id']);
+$currentVideo = null;
+
+if (!empty($videos)) {
+    if ($videoId) {
+        foreach ($videos as $v) {
+            if ($v['id'] == $videoId) {
+                $currentVideo = $v;
+                break;
+            }
+        }
+    }
+    
+    // Default to first video if specific one not found or not provided
+    if (!$currentVideo && !empty($videos)) {
+        $currentVideo = $videos[0];
+    }
+}
+
+include 'includes/header.php'; 
+?>
 
 <main class="container-fluid p-3 p-lg-4">
     <!-- Page Header -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div>
-            <p class="text-primary-blue fw-bold small text-uppercase tracking-widest mb-1" style="font-size: 10px; letter-spacing: 0.2em;">Octal Foundry</p>
-            <h1 class="h4 fw-bold mb-0">Week 7: AI in Healthcare</h1>
+            <p class="text-primary-blue fw-bold small text-uppercase tracking-widest mb-1" style="font-size: 10px; letter-spacing: 0.2em;">
+                <?php echo htmlspecialchars($unit['unit_code'] . ' - ' . $unit['unit_name']); ?>
+            </p>
+            <h1 class="h4 fw-bold mb-0">Week <?php echo $activeWeek['week_number']; ?>: <?php echo htmlspecialchars($activeWeek['week_title']); ?></h1>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary rounded-pill px-3 d-flex align-items-center gap-2">
-                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
-                Progress
-            </button>
+            <a href="roadmap.php?unit_id=<?php echo $unitId; ?>" class="btn btn-outline-secondary rounded-pill px-3 d-flex align-items-center gap-2">
+                <span class="material-symbols-outlined" style="font-size: 18px;">map</span>
+                Back to Roadmap
+            </a>
         </div>
     </div>
 
     <!-- Two Column Layout -->
     <div class="row g-4">
-        <!-- Left Column: Video + Transcript -->
+        <!-- Left Column: Video + Content -->
         <div class="col-12 col-xl-8">
             <!-- MediaPlayer Section -->
+            <?php if ($currentVideo): ?>
             <div class="card bg-card-dark border border-white border-opacity-10 rounded-4 overflow-hidden mb-4">
                 <div class="position-relative d-flex flex-column">
-                    <div class="ratio ratio-16x9 bg-dark" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDYFjNt5hMijJ8I6rLjunvlL2jMGk0RRQcEabmKj3WkKdPoEmvy_bfCxHja-IkAqt6TMV4q02JBHPanjTIWXCRzYDIn0JSEmW3vAV38tTC9xCmZ0G4EJXKHckx-2cOkNjAZ-N34fXedCkfesHiJJKHaBsS_QR1nkHlCI2zXeGn0ZIUhe24X7k9RIDM2OM495C0ikpdtQIYL7iS_L29PXJCRQBnlQqORzu10J50m2WoyJ0t8WHYVx9vOuGS7fY68beOI5EpSTfGMtdc'); background-size: cover; background-position: center;">
-                        <div class="position-absolute top-0 start-0 w-100 h-100 bg-black bg-opacity-25 d-flex align-items-center justify-content-center">
-                            <button class="btn btn-primary-blue rounded-circle p-0 d-flex align-items-center justify-content-center shadow-lg" style="width: 64px; height: 64px; background-color: rgba(13, 127, 242, 0.9);">
-                                <span class="material-symbols-outlined fs-1 text-white filled">play_arrow</span>
-                            </button>
-                        </div>
-
-                        <div class="position-absolute bottom-0 start-0 w-100 p-3" style="background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);">
-                            <div class="d-flex align-items-center mb-2 cursor-pointer">
-                                <div class="progress w-100" style="height: 4px; background-color: rgba(255,255,255,0.3);">
-                                    <div class="progress-bar bg-primary-blue position-relative" role="progressbar" style="width: 30%">
-                                        <div class="position-absolute top-50 start-100 translate-middle bg-primary-blue border border-2 border-white rounded-circle shadow-sm" style="width: 16px; height: 16px;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between text-white">
-                                <span class="small fw-bold tracking-wider" style="font-size: 11px;">12:45 / 24:10</span>
-                                <div class="d-flex gap-3">
-                                    <span class="material-symbols-outlined small">closed_caption</span>
-                                    <span class="material-symbols-outlined small">settings</span>
-                                    <span class="material-symbols-outlined small">fullscreen</span>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="ratio ratio-16x9 bg-black">
+                        <!-- YouTube Embed -->
+                        <iframe 
+                            src="https://www.youtube.com/embed/<?php echo htmlspecialchars($currentVideo['video_id']); ?>?rel=0" 
+                            title="<?php echo htmlspecialchars($currentVideo['title']); ?>" 
+                            frameborder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                            allowfullscreen>
+                        </iframe>
                     </div>
+                </div>
+                <div class="p-4">
+                    <h2 class="h5 fw-bold text-white mb-2"><?php echo htmlspecialchars($currentVideo['title']); ?></h2>
+                    <p class="text-secondary small mb-0"><?php echo htmlspecialchars($currentVideo['description'] ?? ''); ?></p>
                 </div>
             </div>
-
-            <!-- Tabs Section -->
-            <div class="card bg-card-dark border border-white border-opacity-10 rounded-4 overflow-hidden">
-                <div class="d-flex border-bottom border-secondary border-opacity-25 gap-4 px-3">
-                    <button class="btn btn-link text-decoration-none border-bottom border-3 border-primary pb-2 pt-3 text-primary-blue px-0 rounded-0">
-                        <span class="fw-bold small">Transcript</span>
-                    </button>
-                    <button class="btn btn-link text-decoration-none border-bottom border-3 border-transparent pb-2 pt-3 text-secondary px-0 rounded-0">
-                        <span class="fw-bold small">Notes</span>
-                    </button>
-                    <button class="btn btn-link text-decoration-none border-bottom border-3 border-transparent pb-2 pt-3 text-secondary px-0 rounded-0">
-                        <span class="fw-bold small">Resources</span>
-                    </button>
+            <?php else: ?>
+            <div class="card bg-card-dark border border-white border-opacity-10 rounded-4 overflow-hidden mb-4 p-5 text-center">
+                <div class="mb-3">
+                    <span class="material-symbols-outlined text-secondary" style="font-size: 48px;">videocam_off</span>
                 </div>
+                <h3 class="h5 text-white">No Videos Available</h3>
+                <p class="text-secondary small">This week doesn't have any video content curated yet.</p>
+            </div>
+            <?php endif; ?>
 
-                <!-- Transcript Body -->
-                <div class="p-3 d-flex flex-column gap-3" style="max-height: 250px; overflow-y: auto;">
-                    <div>
-                        <p class="text-secondary font-monospace xsmall mb-1" style="font-size: 12px;">[12:10]</p>
-                        <p class="text-light small mb-0">
-                            To accurately segment the glioma boundary, we must first apply a <span class="text-primary-blue fw-semibold">normalization layer</span>. This ensures that variations in MRI scanner intensity don't skew our CNN weights.
-                        </p>
-                    </div>
-                    <div class="bg-primary-blue bg-opacity-10 border-start border-4 border-primary p-2 rounded-end">
-                        <p class="text-secondary font-monospace xsmall mb-1" style="font-size: 12px;">[12:45] CURRENT</p>
-                        <p class="text-white small fw-medium mb-0">
-                            Look at the T1-weighted image on the screen. The hyper-intense regions are what we'll target with the next PyTorch module...
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-secondary font-monospace xsmall mb-1" style="font-size: 12px;">[13:02]</p>
-                        <p class="text-light small mb-0">
-                            Notice how the loss function stabilizes after we introduce Batch Normalization...
-                        </p>
-                    </div>
+            <!-- Week Videos List -->
+            <div class="card bg-card-dark border border-white border-opacity-10 rounded-4 overflow-hidden mb-4">
+                <div class="card-header bg-transparent border-bottom border-secondary border-opacity-25 p-3">
+                    <h3 class="h6 fw-bold text-white m-0">In This Module</h3>
+                </div>
+                <div class="list-group list-group-flush">
+                    <?php foreach ($videos as $index => $v): 
+                        $isActive = ($currentVideo && $currentVideo['id'] == $v['id']);
+                        $bgClass = $isActive ? 'bg-primary-blue bg-opacity-10' : 'bg-transparent';
+                    ?>
+                    <a href="learning.php?unit_id=<?php echo $unitId; ?>&week=<?php echo $activeWeek['week_number']; ?>&video=<?php echo $v['id']; ?>" 
+                       class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 <?php echo $bgClass; ?> border-secondary border-opacity-10 text-white">
+                        <div class="position-relative flex-shrink-0 rounded overflow-hidden" style="width: 120px; aspect-ratio: 16/9;">
+                            <img src="<?php echo htmlspecialchars($v['thumbnail_url']); ?>" class="w-100 h-100 object-fit-cover" alt="Thumb">
+                            <?php if ($isActive): ?>
+                            <div class="position-absolute top-0 start-0 w-100 h-100 bg-black bg-opacity-50 d-flex align-items-center justify-content-center">
+                                <span class="material-symbols-outlined text-white">play_circle</span>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="flex-grow-1 min-width-0">
+                            <h6 class="mb-1 text-truncate small fw-bold <?php echo $isActive ? 'text-primary-blue' : 'text-white'; ?>">
+                                <?php echo htmlspecialchars($v['title']); ?>
+                            </h6>
+                            <small class="text-secondary d-block"><?php echo htmlspecialchars($v['channel_name']); ?></small>
+                        </div>
+                        <div class="text-secondary small">
+                            <?php echo htmlspecialchars($v['duration']); ?>
+                        </div>
+                    </a>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
@@ -98,51 +174,27 @@
                             <div class="bg-primary-blue rounded-circle" style="width: 8px; height: 8px;"></div>
                             <h2 class="h6 fw-bold text-white m-0">Foundry Task</h2>
                         </div>
-                        <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small fw-bold text-uppercase">Critical</span>
+                        <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small fw-bold text-uppercase">Project</span>
                     </div>
                 </div>
                 <div class="card-body p-3">
-                    <h3 class="h6 fw-bold mb-2">MRI Analysis</h3>
                     <p class="text-secondary small mb-3">
-                        Complete the CNN architecture to identify glioma tissue in the provided T1 dataset.
+                        <?php echo htmlspecialchars($activeWeek['project_task'] ?? 'No specific task for this week.'); ?>
                     </p>
 
-                    <!-- IDE / Code Area -->
-                    <div class="rounded-3 overflow-hidden border border-secondary border-opacity-50" style="background-color: #1e1e1e;">
-                        <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom border-secondary border-opacity-50" style="background-color: #2d2d2d;">
-                            <div class="d-flex gap-2">
-                                <div class="rounded-circle bg-danger" style="width: 8px; height: 8px;"></div>
-                                <div class="rounded-circle bg-warning" style="width: 8px; height: 8px;"></div>
-                                <div class="rounded-circle bg-success" style="width: 8px; height: 8px;"></div>
-                            </div>
-                            <p class="text-secondary font-monospace mb-0" style="font-size: 9px;">segmentation_model.py</p>
-                            <span class="material-symbols-outlined text-secondary" style="font-size: 14px;">content_copy</span>
+                    <!-- Submission Status / Link -->
+                    <div class="bg-black bg-opacity-20 rounded-3 p-3 border border-white border-opacity-5 mb-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="material-symbols-outlined text-success" style="font-size: 20px;">check_circle</span>
+                            <span class="text-white small fw-bold">Task Verification</span>
                         </div>
-                        <div class="p-2 font-monospace text-white overflow-auto" style="font-size: 11px;">
-                            <div class="d-flex">
-                                <span class="text-secondary me-2 user-select-none">1</span>
-                                <div><span style="color: #c586c0">import</span> <span style="color: #9cdcfe">torch.nn</span> <span style="color: #c586c0">as</span> <span style="color: #9cdcfe">nn</span></div>
-                            </div>
-                            <div class="d-flex">
-                                <span class="text-secondary me-2 user-select-none">2</span>
-                                <div><span style="color: #d4d4d4">class</span> <span style="color: #4ec9b0">GliomaNet</span><span style="color: #d4d4d4">(nn.Module):</span></div>
-                            </div>
-                            <div class="d-flex bg-primary-blue bg-opacity-25 mx-n2 px-2 border-start border-2 border-primary">
-                                <span class="text-secondary me-2 user-select-none">3</span>
-                                <div class="ms-2"><span class="text-white"># TODO: Add Normalization</span></div>
-                            </div>
-                        </div>
+                        <p class="text-secondary xsmall mb-0">Upload your solution in the Roadmap view to complete this week.</p>
                     </div>
 
-                    <div class="mt-3 d-flex gap-2">
-                        <button class="btn bg-primary-blue text-white fw-bold py-2 rounded-pill flex-grow-1 d-flex align-items-center justify-content-center gap-2">
-                            <span class="material-symbols-outlined" style="font-size: 18px;">rocket_launch</span>
-                            Submit
-                        </button>
-                        <button class="btn btn-outline-secondary rounded-pill px-3">
-                            <span class="material-symbols-outlined" style="font-size: 18px;">help</span>
-                        </button>
-                    </div>
+                    <a href="roadmap.php?unit_id=<?php echo $unitId; ?>#week-<?php echo $activeWeek['week_number']; ?>" class="btn bg-primary-blue text-white fw-bold py-2 rounded-pill w-100 d-flex align-items-center justify-content-center gap-2">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">upload_file</span>
+                        Go to Submission
+                    </a>
                 </div>
             </div>
 
@@ -167,14 +219,10 @@
                         <div class="d-flex align-items-start gap-2">
                             <span class="material-symbols-outlined text-primary-blue" style="font-size: 20px;">auto_awesome</span>
                             <div>
-                                <p class="small fw-bold text-primary-blue mb-1">AI Suggestion</p>
-                                <p class="small mb-0" id="aiCoachText">Loading suggestion...</p>
+                                <p class="small fw-bold text-primary-blue mb-1">Coach Tip</p>
+                                <p class="small mb-0" id="aiCoachText">Loading insights for <?php echo htmlspecialchars($activeWeek['week_title']); ?>...</p>
                             </div>
                         </div>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3">Show Example</button>
-                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3">Explain More</button>
                     </div>
                 </div>
             </div>
@@ -185,19 +233,16 @@
 <script>
     async function fetchAICoach() {
         const textElement = document.getElementById('aiCoachText');
-
-        try {
-            const response = await fetch('http://localhost:8000/api/coach/hint');
-            if (response.ok) {
-                const data = await response.json();
-                textElement.innerHTML = data.message;
-            } else {
-                textElement.innerText = "Coach is offline.";
-            }
-        } catch (error) {
-            console.error('Error fetching AI coach:', error);
-            textElement.innerText = "Coach connection failed.";
-        }
+        // Simple stub for now - normally this would call an endpoint with context
+        setTimeout(() => {
+            const tips = [
+                "Focus on the practical application of this concept.",
+                "Don't forget to review the supplementary materials.",
+                "This topic builds strongly on last week's work.",
+                "Try implementing a small prototype to test your understanding."
+            ];
+            textElement.innerText = tips[Math.floor(Math.random() * tips.length)];
+        }, 1500);
     }
 
     document.addEventListener('DOMContentLoaded', function() {

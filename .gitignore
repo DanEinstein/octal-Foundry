@@ -1,0 +1,20 @@
+# Virtual Environment (at project root)
+venv/
+.venv/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Qoder AI Cache
+.qoder/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# General logs
+*.log
