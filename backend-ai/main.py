@@ -4,7 +4,8 @@ FastAPI server for roadmap generation and AI coaching
 """
 
 import logging
-from fastapi import FastAPI, HTTPException
+import tempfile
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
@@ -12,11 +13,15 @@ from models import (
     RoadmapGenerateRequest,
     RoadmapGenerateResponse,
     WeekRoadmap,
-    VideoData
+    VideoData,
+    CurriculumAnalyzeRequest,
+    CurriculumAnalyzeResponse,
+    RecommendedCourse
 )
 # from services.gemini_service import GeminiService
 # from services.huggingface_service import HuggingFaceService
 from services.groq_service import GroqService
+from services.file_parser_service import FileParserService
 # YouTube API removed - AI now generates video recommendations
 
 # Configure logging
@@ -168,6 +173,102 @@ def get_coach_hint():
         "layer": "BatchNorm2d",
         "position": "after first Conv2d"
     }
+
+
+@app.post("/api/files/parse-units")
+async def parse_units_file(file: UploadFile = File(...)):
+    """
+    Parse uploaded file to extract unit information
+    
+    Supports: TXT, CSV, DOCX, XLSX, PNG, JPG, JPEG
+    """
+    try:
+        logger.info(f"Parsing file: {file.filename}")
+        
+        # Read file content
+        content = await file.read()
+        
+        # Initialize parser with Groq key for image OCR
+        parser = FileParserService(groq_api_key=settings.GROQ_API_KEY)
+        
+        # Parse file
+        units = parser.parse_file(file.filename, content)
+        
+        logger.info(f"Extracted {len(units)} units from {file.filename}")
+        
+        return {
+            "success": True,
+            "filename": file.filename,
+            "units_count": len(units),
+            "units": units
+        }
+        
+    except Exception as e:
+        logger.error(f"File parsing failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "units": []
+        }
+
+
+@app.post("/api/curriculum/analyze", response_model=CurriculumAnalyzeResponse)
+async def analyze_curriculum(request: CurriculumAnalyzeRequest):
+    """
+    Analyze student's curriculum and recommend practical courses
+    
+    Takes student's course info, uploaded units, and interests
+    Returns AI-recommended practical learning paths
+    """
+    try:
+        logger.info(f"Analyzing curriculum for: {request.course_name}")
+        
+        # Validate API key
+        if not settings.GROQ_API_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Groq API key not configured"
+            )
+        
+        # Convert units to dict format
+        units_dict = [u.model_dump() for u in request.units]
+        
+        # Call AI service
+        ai_service = get_ai_service()
+        result = ai_service.analyze_curriculum(
+            course_name=request.course_name,
+            year_of_study=request.year_of_study,
+            current_semester=request.current_semester,
+            units=units_dict,
+            interests=request.interests
+        )
+        
+        # Convert to response models
+        recommended_courses = [
+            RecommendedCourse(**course) 
+            for course in result.get('recommended_courses', [])
+        ]
+        
+        primary = result.get('primary_recommendation')
+        primary_recommendation = RecommendedCourse(**primary) if primary else None
+        
+        logger.info(f"Successfully analyzed curriculum, {len(recommended_courses)} recommendations")
+        
+        return CurriculumAnalyzeResponse(
+            success=True,
+            student_profile_summary=result.get('student_profile_summary'),
+            recommended_courses=recommended_courses,
+            primary_recommendation=primary_recommendation
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Curriculum analysis failed: {str(e)}")
+        return CurriculumAnalyzeResponse(
+            success=False,
+            error=str(e)
+        )
 
 
 if __name__ == "__main__":

@@ -145,3 +145,52 @@ function getCurrentWeek(int $unitId): ?array {
     $week = $stmt->fetch();
     return $week ?: null;
 }
+
+/**
+ * Delete a unit and all its associated data (roadmaps, videos)
+ * @param int $unitId The unit ID to delete
+ * @param int $userId The user ID (for ownership verification)
+ * @return bool True if deleted successfully, false otherwise
+ */
+function deleteUnit(int $unitId, int $userId): bool {
+    $db = db();
+    
+    // First verify ownership
+    $stmt = $db->prepare("SELECT id FROM units WHERE id = ? AND user_id = ?");
+    $stmt->execute([$unitId, $userId]);
+    if (!$stmt->fetch()) {
+        return false; // Unit not found or not owned by user
+    }
+    
+    $db->beginTransaction();
+    
+    try {
+        // 1. Get all roadmap IDs for this unit
+        $stmt = $db->prepare("SELECT id FROM roadmaps WHERE unit_id = ?");
+        $stmt->execute([$unitId]);
+        $roadmapIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        // 2. Delete videos for all roadmaps
+        if (!empty($roadmapIds)) {
+            $placeholders = implode(',', array_fill(0, count($roadmapIds), '?'));
+            $stmt = $db->prepare("DELETE FROM videos WHERE roadmap_id IN ($placeholders)");
+            $stmt->execute($roadmapIds);
+        }
+        
+        // 3. Delete all roadmaps for this unit
+        $stmt = $db->prepare("DELETE FROM roadmaps WHERE unit_id = ?");
+        $stmt->execute([$unitId]);
+        
+        // 4. Delete the unit itself
+        $stmt = $db->prepare("DELETE FROM units WHERE id = ?");
+        $stmt->execute([$unitId]);
+        
+        $db->commit();
+        return true;
+    } catch (Exception $e) {
+        $db->rollBack();
+        error_log("Error deleting unit: " . $e->getMessage());
+        return false;
+    }
+}
+
