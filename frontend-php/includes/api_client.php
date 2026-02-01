@@ -66,6 +66,59 @@ class ApiClient {
     }
     
     /**
+     * Analyze curriculum and get AI recommendations
+     * 
+     * @param array $data Course info, units, and interests
+     * @return array AI recommendations
+     */
+    public function analyzeCurriculum(array $data): array {
+        $this->timeout = 90; // Allow more time for analysis
+        return $this->post('/api/curriculum/analyze', $data);
+    }
+    
+    /**
+     * Parse units file (supports TXT, CSV, DOCX, XLSX, images)
+     * 
+     * @param string $filePath Path to the uploaded file
+     * @param string $fileName Original filename
+     * @return array Parsed units
+     */
+    public function parseUnitsFile(string $filePath, string $fileName): array {
+        $url = $this->baseUrl . '/api/files/parse-units';
+        
+        $ch = curl_init($url);
+        
+        // Create CURLFile for multipart upload
+        $cfile = new CURLFile($filePath, mime_content_type($filePath), $fileName);
+        
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => ['file' => $cfile],
+            CURLOPT_TIMEOUT        => $this->timeout,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+        
+        if ($error) {
+            error_log("File upload cURL Error: $error");
+            return ['success' => false, 'error' => 'Connection failed', 'units' => []];
+        }
+        
+        $data = json_decode($response, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return ['success' => false, 'error' => 'Invalid response', 'units' => []];
+        }
+        
+        return $data;
+    }
+    
+    /**
      * Send POST request
      * 
      * @param string $endpoint API endpoint

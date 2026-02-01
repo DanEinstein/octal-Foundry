@@ -20,6 +20,10 @@ foreach ($units as $unit) {
 }
 
 include 'includes/header.php';
+
+// Handle flash messages
+$deleteSuccess = isset($_GET['deleted']) && $_GET['deleted'] == '1';
+$deleteError = isset($_GET['error']) && $_GET['error'] === 'delete_failed';
 ?>
 
 <!-- My Units Main Content -->
@@ -44,6 +48,22 @@ include 'includes/header.php';
             </a>
         </div>
     </div>
+
+    <?php if ($deleteSuccess): ?>
+    <div class="alert alert-success alert-dismissible fade show rounded-3 mb-4" role="alert">
+        <span class="material-symbols-outlined me-2" style="vertical-align: middle;">check_circle</span>
+        Unit deleted successfully.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php endif; ?>
+    
+    <?php if ($deleteError): ?>
+    <div class="alert alert-danger alert-dismissible fade show rounded-3 mb-4" role="alert">
+        <span class="material-symbols-outlined me-2" style="vertical-align: middle;">error</span>
+        Failed to delete unit. Please try again.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php endif; ?>
 
     <!-- Stats Cards -->
     <div class="row g-3 mb-4">
@@ -166,11 +186,64 @@ include 'includes/header.php';
                     <a href="roadmap.php?unit_id=<?php echo $unit['id']; ?>" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
                         <span class="material-symbols-outlined" style="font-size: 16px;">route</span>
                     </a>
+                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#deleteModal" 
+                            data-unit-id="<?php echo $unit['id']; ?>"
+                            data-unit-name="<?php echo htmlspecialchars($unit['unit_name']); ?>">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+                    </button>
                 </div>
             </div>
         </div>
         <?php endforeach; endif; ?>
     </div>
 </main>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-card-dark border border-white border-opacity-10 rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title text-white" id="deleteModalLabel">
+                    <span class="material-symbols-outlined text-danger me-2" style="vertical-align: middle;">warning</span>
+                    Delete Unit
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-secondary mb-0">
+                    Are you sure you want to delete <strong class="text-white" id="unitNameToDelete"></strong>?
+                </p>
+                <p class="text-danger small mt-2 mb-0">
+                    <span class="material-symbols-outlined me-1" style="font-size: 14px; vertical-align: middle;">error</span>
+                    This will permanently delete the unit, its entire 12-week roadmap, and all associated videos. This action cannot be undone.
+                </p>
+            </div>
+            <div class="modal-footer border-0">
+                <form id="deleteUnitForm" method="POST" action="delete_unit.php">
+                    <input type="hidden" name="unit_id" id="unitIdToDelete" value="">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4">
+                        <span class="material-symbols-outlined me-1" style="font-size: 18px; vertical-align: middle;">delete</span>
+                        Delete Unit
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Handle delete modal data
+document.getElementById('deleteModal').addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    const unitId = button.getAttribute('data-unit-id');
+    const unitName = button.getAttribute('data-unit-name');
+    
+    document.getElementById('unitIdToDelete').value = unitId;
+    document.getElementById('unitNameToDelete').textContent = unitName;
+});
+</script>
 
 <?php include 'includes/footer.php'; ?>
